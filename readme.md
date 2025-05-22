@@ -130,5 +130,5 @@ Return is probability of divroce within 1 month after loan. Single request examp
 
 # ✨ Author & License
 Developed by Dmitrii Shevchuk
-License: MIT
+License: none
    
