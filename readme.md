@@ -34,7 +34,8 @@ These services are connected via the internal Docker network `myproject_network`
 
 📂 postgres: stores training data, API inputs and predictions. Initialized via SQL scripts in ./initdb.
 
-🔬 mlflow-server: runs the MLflow Tracking UI and backend. Stores artifacts under /mlflow/mlruns and metadata in mlflow.db.
+🔬 mlflow-server: runs the MLflow Tracking UI and backend. Stores artifacts under /mlflow/mlruns and metadata in mlflow.db. 
+                  Accessible through localhost:8000/mlflow with password.
 
 🧠 mlflow-train: runs a training pipeline and logs results to MLflow.
 
