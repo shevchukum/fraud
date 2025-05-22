@@ -1,0 +1,136 @@
+services:
+  postgres:
+    image: postgres:13
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mydatabase}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./initdb:/docker-entrypoint-initdb.d
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-mydatabase}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-net
+
+  mlflow-server:
+    image: ghcr.io/mlflow/mlflow:v2.11.3
+    networks:
+      app-net:
+        aliases:
+          - mlflow-server.internal
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --default-artifact-root file:///mlflow/mlruns
+      --host 0.0.0.0
+    volumes:
+      - ./mlflow:/mlflow
+
+  mlflow-train:
+    image: shevchukum/mlflow-train:latest
+    environment:
+      MODEL_NAME: "divorce-model"
+      MLFLOW_TRACKING_URI: "http://mlflow-server:5000"
+      TODAY: ${TODAY:-} 
+    depends_on:
+      - mlflow-server
+    volumes:
+      - ./mlflow:/mlflow
+    networks:
+      - app-net
+
+  fastapi:
+    image: shevchukum/fastapi:latest
+    env_file:
+      - .env
+    environment:
+      # MLflow settings
+      MODEL_NAME: "divorce-model"
+      MLFLOW_TRACKING_URI: "http://mlflow-server:5000"
+      MLFLOW_UI_USERNAME: ${MLFLOW_UI_USERNAME}
+      MLFLOW_UI_PASSWORD: ${MLFLOW_UI_PASSWORD}
+
+      # PostgreSQL settings
+      POSTGRES_HOST: "postgres"
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-mydatabase}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_TABLE: ${PREDICTION_TABLE:-prediction_logs}
+
+      # FastAPI settings
+      APP_PORT: "8000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mlflow-train:
+        condition: service_completed_successfully
+    volumes:
+      - ./mlflow:/mlflow
+    networks:
+      - app-net
+
+  jenkins:
+    image: shevchukum/custom-jenkins:latest
+    container_name: jenkins
+    user: root
+    ports:
+      - "8080:8080"
+    volumes:
+      - jenkins_data:/var/jenkins_home:Z
+      - ./custom-jenkins/drift_scripts:/var/drift_scripts:ro
+      - ./custom-jenkins/pipelines:/var/jenkins_home/pipelines:ro
+      - ./custom-jenkins/init.groovy.d:/var/jenkins_home/init.groovy.d
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./custom-jenkins/docker-compose.train.yml:/var/jenkins_home/docker-compose.train.yml:ro
+      - ./mlflow:/mlflow
+    group_add:
+      - "1001"
+    env_file:
+      - .env
+    environment:
+      JAVA_OPTS: "-Djenkins.install.runSetupWizard=false"
+      JENKINS_URL: "http://jenkins:8080"
+      JENKINS_ADMIN_ID: "${JENKINS_ADMIN_ID}"
+      JENKINS_ADMIN_PASSWORD: "${JENKINS_ADMIN_PASSWORD}"
+
+      # MLflow
+      MODEL_NAME: "divorce-model"
+      MLFLOW_TRACKING_URI: "http://mlflow-server:5000"
+      FASTAPI_UPDATE_URL: "http://fastapi:8000/update-model"
+
+      # PostgreSQL
+      POSTGRES_HOST: "postgres"
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: "${POSTGRES_DB:-mydatabase}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+
+      # Tables
+      POSTGRES_TABLE: "${PREDICTION_TABLE:-prediction_logs}"
+      TRAINING_DATA_TABLE: "${TRAINING_DATA_TABLE:-divorce_predictions}"
+
+      # Drift params
+      DRIFT_MIN_SAMPLES: "${DRIFT_MIN_SAMPLES:-1000}"
+      PSI_THRESHOLD: "0.05"
+    depends_on:
+      - postgres
+    networks:
+      - app-net
+
+volumes:
+  pgdata:
+  jenkins_data:
+
+networks:
+  app-net:
+    external: true
+    name: myproject_network

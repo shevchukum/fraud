@@ -1,0 +1,11 @@
+# Main
+pandas==1.5.3
+numpy==1.23.5
+mlflow==2.3.1
+
+# DB
+psycopg2-binary==2.9.6
+
+# Other
+scipy==1.10.1
+requests==2.28

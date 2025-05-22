@@ -1,0 +1,17 @@
+# docker-compose.train.yml
+services:
+  mlflow-train:
+    image: shevchukum/mlflow:latest
+    environment:
+      MODEL_NAME: "divorce-model"
+      MLFLOW_TRACKING_URI: "http://mlflow-server:5000"
+      TODAY: ${TODAY:-}
+    volumes:
+      - /c/Users/Dima/Fraud/project/mlflow:/mlflow
+    networks:
+      - app-net
+
+networks:
+  app-net:
+    external: true
+    name: myproject_network
